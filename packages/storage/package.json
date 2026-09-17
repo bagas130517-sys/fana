@@ -1,0 +1,20 @@
+{
+  "name": "@fana/storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.670.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4"
+  }
+}

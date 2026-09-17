@@ -1,0 +1,33 @@
+{
+  "name": "@fana/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@fana/core": "workspace:*",
+    "@fana/db": "workspace:*",
+    "@fana/storage": "workspace:*",
+    "@hono-rate-limiter/redis": "^0.1.4",
+    "@hono/node-server": "^1.13.1",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.36.0",
+    "hono": "^4.6.3",
+    "hono-rate-limiter": "^0.5.3",
+    "ioredis": "^5.4.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/ws": "^8.5.12",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.19.1"
+  }
+}

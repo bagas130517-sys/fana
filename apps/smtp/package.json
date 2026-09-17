@@ -1,0 +1,31 @@
+{
+  "name": "@fana/smtp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "dotenv -e ../../.env -- tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@fana/core": "workspace:*",
+    "@fana/db": "workspace:*",
+    "@fana/storage": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "ioredis": "^5.4.1",
+    "mailauth": "^4.6.9",
+    "mailparser": "^3.7.1",
+    "smtp-server": "^3.13.6"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.5",
+    "@types/node": "^22.7.4",
+    "@types/smtp-server": "^3.5.10",
+    "dotenv-cli": "^7.4.2",
+    "tsx": "^4.19.1"
+  }
+}

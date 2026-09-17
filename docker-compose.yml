@@ -1,0 +1,149 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # One source of truth: .env. These are read only when the volume is
+      # initialised — changing the password later does nothing to an existing
+      # pgdata, so it has to be ALTER USER (or a wiped volume) after that.
+      POSTGRES_USER: ${DB_USER:-fana}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fana}
+      POSTGRES_DB: ${DB_NAME:-fana}
+    ports:
+      # Bound to localhost only — lets host-run `pnpm dev` reach it, not the network.
+      # Host port is configurable to avoid clashing with a local Postgres.
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Names the database too: `pg_isready -U x` checks a database called x,
+      # which is wrong the moment DB_NAME and DB_USER differ.
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fana} -d ${DB_NAME:-fana}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  smtp:
+    build:
+      context: .
+      dockerfile: apps/smtp/Dockerfile
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-fana}
+      DB_USER: ${DB_USER:-fana}
+      DB_PASSWORD: ${DB_PASSWORD:-fana}
+      REDIS_URL: redis://redis:6379
+    ports:
+      # Public MX port. On many hosts port 25 must be explicitly unblocked.
+      - "25:25"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-fana}
+      DB_USER: ${DB_USER:-fana}
+      DB_PASSWORD: ${DB_PASSWORD:-fana}
+      REDIS_URL: redis://redis:6379
+    ports:
+      # Bound to localhost: the proxy reaches this over the compose network, so
+      # publishing it to 0.0.0.0 would serve the API — bearer tokens and mail —
+      # over plain HTTP alongside the HTTPS one.
+      - "127.0.0.1:${API_HOST_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+      # Server-side branding fetch stays on the compose network.
+      API_INTERNAL_URL: http://api:4000
+      # Seeds the site name; the rest of the branding is edited in /admin.
+      SITE_NAME: ${SITE_NAME:-fana}
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+  # Automatic HTTPS in front of everything. The only public entry points are
+  # this (80/443) and smtp (25) — see infra/Caddyfile for the routes, and note
+  # that /api and /v1 are separate mounts that both need one.
+  caddy:
+    image: caddy:alpine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - api
+      - web
+
+  # Optional S3-compatible store for attachments (STORAGE_DRIVER=s3).
+  # Start with: docker compose --profile s3 up
+  minio:
+    image: minio/minio
+    profiles: ["s3"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: fana
+      MINIO_ROOT_PASSWORD: fanaminio
+    ports:
+      - "127.0.0.1:9000:9000" # S3 API
+      - "127.0.0.1:9001:9001" # web console
+    volumes:
+      - miniodata:/data
+
+  # One-shot: waits for MinIO and creates the attachments bucket.
+  minio-setup:
+    image: minio/mc
+    profiles: ["s3"]
+    depends_on:
+      - minio
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 fana fanaminio; do echo 'waiting for minio'; sleep 1; done &&
+      mc mb --ignore-existing local/fana-attachments &&
+      echo 'bucket ready'
+      "
+
+volumes:
+  pgdata:
+  miniodata:
+  # Caddy's issued certificates — losing this means re-issuing on every restart,
+  # which Let's Encrypt rate-limits.
+  caddydata:
+  caddyconfig:

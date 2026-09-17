@@ -1,0 +1,35 @@
+# Reverse proxy with automatic HTTPS for a production deploy.
+#
+# The public host + upstream targets come from env vars (see .env.example),
+# so this file stays generic — forks configure their deploy in .env, not here.
+#
+#   SITE_ADDRESS  your public web host, e.g. mail.example.com (default: localhost)
+#   API_UPSTREAM  where the api service lives  (default: api:4000)
+#   WEB_UPSTREAM  where the web service lives  (default: web:3000)
+#
+# Run: SITE_ADDRESS=your.domain caddy run --config infra/Caddyfile
+
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+
+	# Both API surfaces, plus the realtime socket, to the api service.
+	#
+	# /api and /v1 are separate mounts, and forgetting one does not 404 — the
+	# web app's catch-all resolves an unknown path to an inbox and answers 200
+	# with HTML, so an API client sees a successful page instead of an error.
+	# Add the route here whenever the api service grows a new top-level mount.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:4000}
+	}
+	handle /v1/* {
+		reverse_proxy {$API_UPSTREAM:api:4000}
+	}
+	handle /ws* {
+		reverse_proxy {$API_UPSTREAM:api:4000}
+	}
+
+	# Everything else to the Next.js web app.
+	handle {
+		reverse_proxy {$WEB_UPSTREAM:web:3000}
+	}
+}
